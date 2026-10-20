@@ -1,31 +1,120 @@
-const request = require('supertest');
-const express = require('express');
-const createApiRouter = require('../routes');
-const path = require('path');
+import React, { useEffect } from 'react';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { fetchBooks, setSort } from '../store/booksSlice';
+import { addFavorite, fetchFavorites } from '../store/favoritesSlice';
+import { useNavigate } from 'react-router-dom';
+import styles from '../styles/BookList.module.css';
 
-const app = express();
-app.use(express.json());
-app.use('/api', createApiRouter({
-  usersFile: path.join(__dirname, '../data/test-users.json'),
-  booksFile: path.join(__dirname, '../data/test-books.json'),
-  readJSON: (file) => require('fs').existsSync(file) ? JSON.parse(require('fs').readFileSync(file, 'utf-8')) : [],
-  writeJSON: (file, data) => require('fs').writeFileSync(file, JSON.stringify(data, null, 2)),
-  authenticateToken: (req, res, next) => next(), // No auth for books
-  SECRET_KEY: 'test_secret',
-}));
+const BookList = () => {
+  const dispatch = useAppDispatch();
+  const books = useAppSelector(state => state.books.items);
+  const status = useAppSelector(state => state.books.status);
+  const sortBy = useAppSelector(state => state.books.sortBy);
+  const sortOrder = useAppSelector(state => state.books.sortOrder);
+  const token = useAppSelector(state => state.user.token);
+  const navigate = useNavigate();
+  const favorites = useAppSelector(state => state.favorites.items);
 
-describe('Books API', () => {
-  it('GET /api/books should return a list of books', async () => {
-    const res = await request(app).get('/api/books');
-    expect(res.statusCode).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body.length).toBeGreaterThan(0);
-  });
+  useEffect(() => {
+    const savedSort = localStorage.getItem('bookSort');
+    if (savedSort) {
+      try {
+        const parsed = JSON.parse(savedSort);
+        dispatch(setSort({ sortBy: parsed.sortBy || 'title', sortOrder: parsed.sortOrder || 'asc' }));
+      } catch (error) {
+        localStorage.removeItem('bookSort');
+      }
+    }
+  }, [dispatch]);
 
-  it('POST /api/books should not be allowed', async () => {
-    const res = await request(app)
-      .post('/api/books')
-      .send({ title: 'Test Book', author: 'Test Author' });
-    expect([404, 405]).toContain(res.statusCode);
-  });
-});
+  useEffect(() => {
+    if (!token) {
+      navigate('/');
+      return;
+    }
+    localStorage.setItem('bookSort', JSON.stringify({ sortBy, sortOrder }));
+    dispatch(fetchBooks({ sortBy, sortOrder }));
+    dispatch(fetchFavorites(token));
+  }, [dispatch, token, navigate, sortBy, sortOrder]);
+
+  const handleAddFavorite = async (bookId) => {
+    if (!token) {
+      navigate('/');
+      return;
+    }
+    await dispatch(addFavorite({ token, bookId }));
+    dispatch(fetchFavorites(token));
+  };
+
+  const handleSortChange = event => {
+    dispatch(setSort({ sortBy: event.target.value, sortOrder }));
+  };
+
+  const handleSortOrderToggle = () => {
+    dispatch(setSort({ sortBy, sortOrder: sortOrder === 'asc' ? 'desc' : 'asc' }));
+  };
+
+  if (status === 'loading') return <div>Loading...</div>;
+  if (status === 'failed') return <div>Failed to load books.</div>;
+
+  return (
+    <div>
+      <h2>Books</h2>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+        <label htmlFor="book-sort">Sort by</label>
+        <select id="book-sort" value={sortBy} onChange={handleSortChange}>
+          <option value="title">Title</option>
+          <option value="author">Author</option>
+        </select>
+        <button type="button" onClick={handleSortOrderToggle}>
+          {sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+        </button>
+        <span aria-live="polite">
+          Current: {sortBy.charAt(0).toUpperCase() + sortBy.slice(1)} ({sortOrder === 'asc' ? 'A→Z' : 'Z→A'})
+        </span>
+      </div>
+      {books.length === 0 ? (
+        <div style={{
+          background: '#fff',
+          padding: '2rem',
+          borderRadius: '8px',
+          maxWidth: '400px',
+          margin: '2rem auto',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+          textAlign: 'center',
+          color: '#888',
+        }}>
+          <p>No books available.</p>
+          <p>Check back later or add a new book if you have permission.</p>
+        </div>
+      ) : (
+        <div className={styles.bookGrid}>
+          {books.map(book => {
+            const isFavorite = favorites.some(fav => fav.id === book.id);
+            return (
+              <div className={styles.bookCard + ' ' + styles.bookCardWithHeart} key={book.id}>
+                {isFavorite && (
+                  <span className={styles.favoriteHeart} title="In Favorites">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="#e25555" stroke="#e25555" strokeWidth="1.5">
+                      <path d="M12 21s-6.2-5.2-8.4-7.4C1.2 11.2 1.2 8.1 3.1 6.2c1.9-1.9 5-1.9 6.9 0l2 2 2-2c1.9-1.9 5-1.9 6.9 0 1.9 1.9 1.9 5 0 6.9C18.2 15.8 12 21 12 21z"/>
+                    </svg>
+                  </span>
+                )}
+                <div className={styles.bookTitle}>{book.title}</div>
+                <div className={styles.bookAuthor}>by {book.author}</div>
+                <button
+                  className={styles.simpleBtn}
+                  onClick={() => handleAddFavorite(book.id)}
+                >
+                  {isFavorite ? 'In Favorites' : 'Add to Favorites'}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default BookList;

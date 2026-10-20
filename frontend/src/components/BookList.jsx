@@ -1,85 +1,78 @@
+describe('Book Favorites App', () => {
+  const username = `e2euser${Math.floor(Math.random() * 1000)}`;
+  const password = `e2epass${Math.floor(Math.random() * 1000)}`;
+  const user = { username, password };
 
-import React, { useEffect } from 'react';
-import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { fetchBooks } from '../store/booksSlice';
-import { addFavorite, fetchFavorites } from '../store/favoritesSlice';
-import { useNavigate } from 'react-router-dom';
-import styles from '../styles/BookList.module.css';
+  beforeEach(() => {
+    cy.visit('http://localhost:5173');
+  });
 
-const BookList = () => {
-  const dispatch = useAppDispatch();
-  const books = useAppSelector(state => state.books.items);
-  const status = useAppSelector(state => state.books.status);
-  const token = useAppSelector(state => state.user.token);
-  const navigate = useNavigate();
-  const favorites = useAppSelector(state => state.favorites.items);
+  it('should allow a new user to register and login', () => {
+    cy.contains('Create Account').click();
+    cy.get('input[name="username"]').type(user.username);
+    cy.get('input[name="password"]').type(user.password);
+    cy.get('button#register').click();
+    cy.contains('Registration successful! You can now log in.').should('exist');
+    cy.wait(2000);
+    cy.get('input[name="username"]').type(user.username);
+    cy.get('input[name="password"]').type(user.password);
+    cy.get('button#login').click();
+    cy.contains(`Hi, ${user.username}`).should('exist');
+    cy.contains('Favorites').should('exist');
+  });
 
-  useEffect(() => {
-    if (!token) {
-      navigate('/');
-      return;
-    }
-    dispatch(fetchBooks());
-    dispatch(fetchFavorites(token));
-  }, [dispatch, token, navigate]);
+  it('should show books and allow adding to favorites', () => {
+    cy.contains('Login').click();
+    cy.get('input[name="username"]').type(user.username);
+    cy.get('input[name="password"]').type(user.password);
+    cy.get('button#login').click();
+    cy.contains('Books').click();
+    cy.contains('h2', 'Books').should('exist');
+    cy.get('button').contains('Add to Favorites').first().click();
+    cy.get('a#favorites-link').click();
+    cy.get('h2').contains('My Favorite Books').should('exist');
+  });
 
-  const handleAddFavorite = async (bookId) => {
-    if (!token) {
-      navigate('/');
-      return;
-    }
-    await dispatch(addFavorite({ token, bookId }));
-    dispatch(fetchFavorites(token));
-  };
+  it('should sort books by title and author and keep the selection visible', () => {
+    cy.contains('Login').click();
+    cy.get('input[name="username"]').type(user.username);
+    cy.get('input[name="password"]').type(user.password);
+    cy.get('button#login').click();
+    cy.contains('Books').click();
 
-  if (status === 'loading') return <div>Loading...</div>;
-  if (status === 'failed') return <div>Failed to load books.</div>;
+    cy.get('#book-sort').select('title');
+    cy.contains('Current: Title (A→Z)').should('exist');
+    cy.get('.bookTitle').first().should('contain.text', '1984');
 
-  return (
-    <div>
-      <h2>Books</h2>
-      {books.length === 0 ? (
-        <div style={{
-          background: '#fff',
-          padding: '2rem',
-          borderRadius: '8px',
-          maxWidth: '400px',
-          margin: '2rem auto',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-          textAlign: 'center',
-          color: '#888',
-        }}>
-          <p>No books available.</p>
-          <p>Check back later or add a new book if you have permission.</p>
-        </div>
-      ) : (
-        <div className={styles.bookGrid}>
-          {books.map(book => {
-            const isFavorite = favorites.some(fav => fav.id === book.id);
-            return (
-              <div className={styles.bookCard + ' ' + styles.bookCardWithHeart} key={book.id}>
-                {isFavorite && (
-                  <span className={styles.favoriteHeart} title="In Favorites">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="#e25555" stroke="#e25555" strokeWidth="1.5">
-                      <path d="M12 21s-6.2-5.2-8.4-7.4C1.2 11.2 1.2 8.1 3.1 6.2c1.9-1.9 5-1.9 6.9 0l2 2 2-2c1.9-1.9 5-1.9 6.9 0 1.9 1.9 1.9 5 0 6.9C18.2 15.8 12 21 12 21z"/>
-                    </svg>
-                  </span>
-                )}
-                <div className={styles.bookTitle}>{book.title}</div>
-                <div className={styles.bookAuthor}>by {book.author}</div>
-                <button
-                  className={styles.simpleBtn}
-                  onClick={() => handleAddFavorite(book.id)}
-                >
-                  {isFavorite ? 'In Favorites' : 'Add to Favorites'}
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-};
+    cy.get('#book-sort').select('author');
+    cy.contains('Current: Author (A→Z)').should('exist');
+    cy.get('.bookAuthor').first().should('contain.text', 'by Aldous Huxley');
 
-export default BookList;
+    cy.contains('button', 'Ascending').click();
+    cy.contains('Current: Author (Z→A)').should('exist');
+  });
+
+  it('should clear all favorite books after confirmation', () => {
+    cy.contains('Login').click();
+    cy.get('input[name="username"]').type(user.username);
+    cy.get('input[name="password"]').type(user.password);
+    cy.get('button#login').click();
+    cy.contains('Books').click();
+    cy.get('button').contains('Add to Favorites').first().click();
+    cy.get('a#favorites-link').click();
+    cy.on('window:confirm', () => true);
+    cy.contains('button', 'Clear All').click();
+    cy.contains('No favorite books yet.').should('exist');
+  });
+
+  it('should logout and protect routes', () => {
+    cy.contains('Login').click();
+    cy.get('input[name="username"]').type(user.username);
+    cy.get('input[name="password"]').type(user.password);
+    cy.get('button#login').click();
+    cy.get('button#logout').click();
+    cy.contains('Login').should('exist');
+    cy.visit('http://localhost:5173/books');
+    cy.url().should('eq', 'http://localhost:5173/');
+  });
+});

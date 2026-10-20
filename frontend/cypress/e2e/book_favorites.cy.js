@@ -1,60 +1,46 @@
-describe('Book Favorites App', () => {
-  const username = `e2euser${Math.floor(Math.random() * 1000)}`;
-  const password = `e2epass${Math.floor(Math.random() * 1000)}`;
-  const user = { username, password };
+const request = require('supertest');
+const express = require('express');
+const createApiRouter = require('../routes');
+const path = require('path');
 
-  beforeEach(() => {
-    cy.visit('http://localhost:5173');
+const app = express();
+app.use(express.json());
+app.use('/api', createApiRouter({
+  usersFile: path.join(__dirname, '../data/test-users.json'),
+  booksFile: path.join(__dirname, '../data/test-books.json'),
+  readJSON: (file) => require('fs').existsSync(file) ? JSON.parse(require('fs').readFileSync(file, 'utf-8')) : [],
+  writeJSON: (file, data) => require('fs').writeFileSync(file, JSON.stringify(data, null, 2)),
+  authenticateToken: (req, res, next) => next(), // No auth for books
+  SECRET_KEY: 'test_secret',
+}));
+
+describe('Books API', () => {
+  it('GET /api/books should return a list of books', async () => {
+    const res = await request(app).get('/api/books');
+    expect(res.statusCode).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.length).toBeGreaterThan(0);
   });
 
-  it('should allow a new user to register and login', () => {
-    cy.contains('Create Account').click();
-    cy.get('input[name="username"]').type(user.username);
-    cy.get('input[name="password"]').type(user.password);
-    cy.get('button#register').click();
-    cy.contains('Registration successful! You can now log in.').should('exist');
-    cy.wait(2000);
-    cy.get('input[name="username"]').type(user.username);
-    cy.get('input[name="password"]').type(user.password);
-    cy.get('button#login').click();
-    cy.contains(`Hi, ${user.username}`).should('exist');
-    cy.contains('Favorites').should('exist');
+  it('GET /api/books should sort by title ascending by default', async () => {
+    const res = await request(app).get('/api/books?sort=title&order=asc');
+    expect(res.statusCode).toBe(200);
+    expect(res.body[0].title).toBe('1984');
+    expect(res.body[1].title).toBe('To Kill a Mockingbird');
   });
 
-  it('should show books and allow adding to favorites', () => {
-    cy.contains('Login').click();
-    cy.get('input[name="username"]').type(user.username);
-    cy.get('input[name="password"]').type(user.password);
-    cy.get('button#login').click();
-    cy.contains('Books').click();
-    cy.contains('h2', 'Books').should('exist');
-    cy.get('button').contains('Add to Favorites').first().click();
-    cy.get('a#favorites-link').click();
-    cy.get('h2').contains('My Favorite Books').should('exist');
+  it('GET /api/books should sort by author descending', async () => {
+    const res = await request(app).get('/api/books?sort=author&order=desc');
+    expect(res.statusCode).toBe(200);
+    const authors = res.body.map(book => book.author);
+    expect(authors[0]).toBe('William Faulkner');
+    expect(authors[authors.length - 1]).toBe('Aldous Huxley');
   });
 
-  it('should clear all favorite books after confirmation', () => {
-    cy.contains('Login').click();
-    cy.get('input[name="username"]').type(user.username);
-    cy.get('input[name="password"]').type(user.password);
-    cy.get('button#login').click();
-    cy.contains('Books').click();
-    cy.get('button').contains('Add to Favorites').first().click();
-    cy.get('a#favorites-link').click();
-    cy.contains('button', 'Clear All').click();
-    cy.on('window:confirm', () => true);
-    cy.contains('button', 'Clear All').should('not.exist');
-    cy.contains('No favorite books yet.').should('exist');
-  });
-
-  it('should logout and protect routes', () => {
-    cy.contains('Login').click();
-    cy.get('input[name="username"]').type(user.username);
-    cy.get('input[name="password"]').type(user.password);
-    cy.get('button#login').click();
-    cy.get('button#logout').click();
-    cy.contains('Login').should('exist');
-    cy.visit('http://localhost:5173/books');
-    cy.url().should('eq', 'http://localhost:5173/');
+  it('POST /api/books should not be allowed', async () => {
+    const res = await request(app)
+      .post('/api/books')
+      .send({ title: 'Test Book', author: 'Test Author' });
+    expect([404, 405]).toContain(res.statusCode);
   });
 });
