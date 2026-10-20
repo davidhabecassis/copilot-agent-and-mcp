@@ -1,5 +1,6 @@
 const express = require('express');
 
+// generated-by-copilot: backend review routes add validation, average rating, and request throttling.
 const REVIEW_RATE_LIMIT_MS = 60000;
 
 function createBooksRouter({ booksFile, readJSON, writeJSON, authenticateToken }) {
@@ -112,7 +113,7 @@ function createBooksRouter({ booksFile, readJSON, writeJSON, authenticateToken }
     });
   });
 
-  router.post('/:id/reviews', enforceReviewRateLimit, validateReviewPayload, (req, res) => {
+  router.post('/:id/reviews', authenticateToken, enforceReviewRateLimit, validateReviewPayload, (req, res) => {
     const books = readJSON(booksFile);
     const book = books.find(item => String(item.id) === String(req.params.id));
 
