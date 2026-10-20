@@ -4,11 +4,16 @@ export const fetchFavorites = createAsyncThunk('favorites/fetchFavorites', async
   const res = await fetch('http://localhost:4000/api/favorites', {
     headers: { Authorization: `Bearer ${token}` },
   });
+
+  if (!res.ok) {
+    throw new Error('Failed to fetch favorites');
+  }
+
   return res.json();
 });
 
 export const addFavorite = createAsyncThunk('favorites/addFavorite', async ({ token, bookId }) => {
-  await fetch('http://localhost:4000/api/favorites', {
+  const res = await fetch('http://localhost:4000/api/favorites', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -16,23 +21,59 @@ export const addFavorite = createAsyncThunk('favorites/addFavorite', async ({ to
     },
     body: JSON.stringify({ bookId }),
   });
+
+  if (!res.ok) {
+    throw new Error('Failed to add favorite');
+  }
+
   return bookId;
+});
+
+export const clearFavorites = createAsyncThunk('favorites/clearFavorites', async (token) => {
+  const res = await fetch('http://localhost:4000/api/favorites', {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error('Failed to clear favorites');
+  }
+
+  return res.json();
 });
 
 const favoritesSlice = createSlice({
   name: 'favorites',
-  initialState: { items: [], status: 'idle' },
+  initialState: { items: [], status: 'idle', error: null },
   reducers: {},
   extraReducers: builder => {
     builder
-      .addCase(fetchFavorites.pending, state => { state.status = 'loading'; })
+      .addCase(fetchFavorites.pending, state => {
+        state.status = 'loading';
+        state.error = null;
+      })
       .addCase(fetchFavorites.fulfilled, (state, action) => {
         state.status = 'succeeded';
         state.items = action.payload;
+        state.error = null;
       })
-      .addCase(fetchFavorites.rejected, state => { state.status = 'failed'; })
-      .addCase(addFavorite.fulfilled, (state, action) => {
-        // After adding, fetch the updated favorites list to ensure UI is in sync
+      .addCase(fetchFavorites.rejected, state => {
+        state.status = 'failed';
+        state.error = 'Failed to load favorites.';
+      })
+      .addCase(addFavorite.fulfilled, () => {
+        // The caller refetches the favorites list after a successful add.
+      })
+      .addCase(clearFavorites.fulfilled, state => {
+        state.items = [];
+        state.status = 'succeeded';
+        state.error = null;
+      })
+      .addCase(clearFavorites.rejected, state => {
+        state.status = 'failed';
+        state.error = 'Failed to clear favorites.';
       });
   },
 });

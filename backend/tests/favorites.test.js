@@ -60,12 +60,12 @@ describe('Favorites API', () => {
 
   it('POST /api/favorites should add a book to favorites', async () => {
     const token = getToken('sandra');
-    // Pick a book not already in favorites
     const books = JSON.parse(fs.readFileSync(booksFile, 'utf-8'));
     const users = JSON.parse(fs.readFileSync(usersFile, 'utf-8'));
     const sandra = users.find(u => u.username === 'sandra');
     const notFav = books.find(b => !sandra.favorites.includes(b.id));
-    if (!notFav) return; // skip if all are favorites
+    if (!notFav) return;
+
     const res = await request(app)
       .post('/api/favorites')
       .set('Authorization', `Bearer ${token}`)
@@ -109,6 +109,37 @@ describe('Favorites API', () => {
     const res = await request(app)
       .post('/api/favorites')
       .send({ bookId: '1' });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('DELETE /api/favorites should clear all favorites for valid user', async () => {
+    const token = getToken('sandra');
+    const res = await request(app)
+      .delete('/api/favorites')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.message).toMatch(/cleared/i);
+
+    const listRes = await request(app)
+      .get('/api/favorites')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(listRes.statusCode).toBe(200);
+    expect(listRes.body).toEqual([]);
+  });
+
+  it('DELETE /api/favorites should 404 for non-existent user', async () => {
+    const token = getToken('nouser');
+    const res = await request(app)
+      .delete('/api/favorites')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('DELETE /api/favorites should fail without auth', async () => {
+    const res = await request(app).delete('/api/favorites');
     expect(res.statusCode).toBe(401);
   });
 });
