@@ -60,7 +60,6 @@ describe('Favorites API', () => {
 
   it('POST /api/favorites should add a book to favorites', async () => {
     const token = getToken('sandra');
-    // Pick a book not already in favorites
     const books = JSON.parse(fs.readFileSync(booksFile, 'utf-8'));
     const users = JSON.parse(fs.readFileSync(usersFile, 'utf-8'));
     const sandra = users.find(u => u.username === 'sandra');
@@ -85,6 +84,23 @@ describe('Favorites API', () => {
       .send({ bookId: alreadyFav });
     expect(res.statusCode).toBe(200);
     expect(res.body.message).toMatch(/added/);
+  });
+
+  it('DELETE /api/favorites should clear all favorite books', async () => {
+    const token = getToken('sandra');
+    const res = await request(app)
+      .delete('/api/favorites')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.message).toMatch(/cleared/i);
+
+    const favoritesRes = await request(app)
+      .get('/api/favorites')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(favoritesRes.statusCode).toBe(200);
+    expect(favoritesRes.body).toEqual([]);
   });
 
   it('POST /api/favorites should fail with missing bookId', async () => {
